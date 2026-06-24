@@ -154,7 +154,8 @@ function App() {
 
           <div className="hero__title-container">
             <h1 className="hero__title">
-              PICHAYUT<br />SOMBOON
+              <span className="title-first">PICHAYUT</span>
+              <span className="title-last">SOMBOON</span>
             </h1>
             <p className="hero__subtitle">
               Computer Science Educator specializing in computational thinking, programming logic, and systems architecture. Currently serving teaching practicum at Lopburi Technical College.
