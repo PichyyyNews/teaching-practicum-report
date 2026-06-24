@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import './App.css';
 
 type Section = 'home' | 'about' | 'academics' | 'lessons' | 'gallery' | 'contact';
@@ -10,6 +12,13 @@ function App() {
   const [isHoveringPortrait, setIsHoveringPortrait] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const [formSubmitted, setFormSubmitted] = useState(false);
+
+  // Map state
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapObj, setMapObj] = useState<L.Map | null>(null);
+  const [mapCoords, setMapCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapPixelCoords, setMapPixelCoords] = useState<{ x: number; y: number } | null>(null);
+  const [mapZoom, setMapZoom] = useState(15);
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -27,6 +36,78 @@ function App() {
     }, 3000);
   };
 
+  // Initialize Leaflet Map
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = L.map(mapRef.current, {
+      center: [14.801364301168958, 100.61993969324199],
+      zoom: 15,
+      zoomControl: false,
+      attributionControl: false,
+      scrollWheelZoom: false // disable scroll zoom so user can scroll page smoothly
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 20
+    }).addTo(map);
+
+    const targetIcon = L.divIcon({
+      className: 'military-target-icon',
+      html: `
+        <div class="radar-ping"></div>
+        <div class="radar-crosshair">
+          <div class="h-line"></div>
+          <div class="v-line"></div>
+          <div class="circle-1"></div>
+          <div class="circle-2"></div>
+        </div>
+      `,
+      iconSize: [40, 40],
+      iconAnchor: [20, 20]
+    });
+
+    L.marker([14.801364301168958, 100.61993969324199], { icon: targetIcon }).addTo(map);
+
+    setMapObj(map);
+
+    map.on('zoomend', () => {
+      setMapZoom(map.getZoom());
+    });
+
+    return () => {
+      map.remove();
+    };
+  }, []);
+
+  const handleMapMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!mapObj) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setMapPixelCoords({ x, y });
+
+    try {
+      const latLng = mapObj.containerPointToLatLng([x, y]);
+      setMapCoords({ lat: latLng.lat, lng: latLng.lng });
+    } catch (err) {
+      // ignore point out of bounds
+    }
+  };
+
+  const handleMapMouseLeave = () => {
+    setMapPixelCoords(null);
+    setMapCoords(null);
+  };
+
+  const scrollToSection = (id: string) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+    setActiveSection('home'); // resets drawer state
+  };
+
   return (
     <div className="app-container">
       {/* Swiss grid lines & diagonal lines overlay in background */}
@@ -38,8 +119,8 @@ function App() {
       <header className="header">
         <div className="header__logo">P. SOMBOON</div>
         <ul className="header__nav">
-          <li className={`header__nav-item ${activeSection === 'home' ? 'active' : ''}`}>
-            <button onClick={() => setActiveSection('home')}>00 Home</button>
+          <li className="header__nav-item">
+            <button onClick={() => scrollToSection('hero')}>00 Start</button>
           </li>
           <li className={`header__nav-item ${activeSection === 'about' ? 'active' : ''}`}>
             <button onClick={() => setActiveSection('about')}>01 Profile</button>
@@ -47,20 +128,23 @@ function App() {
           <li className={`header__nav-item ${activeSection === 'academics' ? 'active' : ''}`}>
             <button onClick={() => setActiveSection('academics')}>02 Academics</button>
           </li>
+          <li className="header__nav-item">
+            <button onClick={() => scrollToSection('practicum-location')}>03 School</button>
+          </li>
           <li className={`header__nav-item ${activeSection === 'lessons' ? 'active' : ''}`}>
-            <button onClick={() => setActiveSection('lessons')}>03 Lessons</button>
+            <button onClick={() => setActiveSection('lessons')}>04 Lessons</button>
           </li>
           <li className={`header__nav-item ${activeSection === 'gallery' ? 'active' : ''}`}>
-            <button onClick={() => setActiveSection('gallery')}>04 Gallery</button>
+            <button onClick={() => setActiveSection('gallery')}>05 Gallery</button>
           </li>
           <li className={`header__nav-item ${activeSection === 'contact' ? 'active' : ''}`}>
-            <button onClick={() => setActiveSection('contact')}>05 Contact</button>
+            <button onClick={() => setActiveSection('contact')}>06 Contact</button>
           </li>
         </ul>
       </header>
 
-      {/* Main Content: Split Grid */}
-      <main className="hero-grid">
+      {/* Section 1: Hero Viewport */}
+      <main id="hero" className="hero-grid">
         {/* Left Side: Editorial Typography & Information */}
         <section className="hero__content">
           <div className="hero__top-marker">
@@ -73,7 +157,7 @@ function App() {
               PICHAYUT<br />SOMBOON
             </h1>
             <p className="hero__subtitle">
-              Computer Science Educator specializing in computational thinking, programming logic, and systems architecture. Currently serving teaching practicum at Triam Udom Suksa School.
+              Computer Science Educator specializing in computational thinking, programming logic, and systems architecture. Currently serving teaching practicum at Lopburi Technical College.
             </p>
             <div style={{ display: 'flex', gap: '16px', marginTop: '24px' }}>
               <button 
@@ -86,9 +170,9 @@ function App() {
               <button 
                 className="close-btn" 
                 style={{ textTransform: 'uppercase', backgroundColor: '#ffffff', color: '#000000', borderColor: '#ffffff' }}
-                onClick={() => setActiveSection('lessons')}
+                onClick={() => scrollToSection('practicum-location')}
               >
-                View Lessons
+                View Location Map
               </button>
             </div>
           </div>
@@ -96,18 +180,18 @@ function App() {
           <div className="hero__footer-meta">
             <div className="meta-box">
               <p className="meta-box__label">Subject area</p>
-              <p className="meta-box__value">Computer Science & Python</p>
+              <p className="meta-box__value">Information Technology & coding</p>
             </div>
             <div className="meta-box">
               <p className="meta-box__label">Institution</p>
-              <p className="meta-box__value">Triam Udom Suksa School</p>
+              <p className="meta-box__value">Lopburi Technical College</p>
             </div>
           </div>
         </section>
 
         {/* Right Side: Portrait Image & Interactive Lines */}
         <section className="hero__visual">
-          <div className="visual-coordinate coord-top-left font-mono">[N 47° 22' 36.84" / E 8° 32' 30.12"]</div>
+          <div className="visual-coordinate coord-top-left font-mono">[N 14° 48' 4.91" / E 100° 37' 11.78"]</div>
           <div className="visual-coordinate coord-top-right font-mono">SWISS DESIGN SYSTEM</div>
           <div className="visual-coordinate coord-bottom-left font-mono">GRID: 80PX BASELINE</div>
           <div className="visual-coordinate coord-bottom-right font-mono">
@@ -178,7 +262,138 @@ function App() {
         </section>
       </main>
 
-      {/* Sliding detail drawers for sections */}
+      {/* Section 2: School Context & Tactical Map */}
+      <section id="practicum-location" className="tactical-map-section">
+        {/* Left Side: School Info */}
+        <div className="hero__content" style={{ borderRight: '1px solid var(--color-border)' }}>
+          <div className="hero__top-marker">
+            <span className="hero__marker-label font-mono">02 / PRACTICUM STATION</span>
+            <span className="hero__marker-label font-mono">STATUS: ACTIVE SCAN</span>
+          </div>
+
+          <div className="hero__title-container">
+            <h2 className="hero__title" style={{ fontSize: 'clamp(32px, 4.5vw, 64px)' }}>
+              LOPBURI<br />TECHNICAL<br />COLLEGE
+            </h2>
+            <p className="hero__subtitle" style={{ fontSize: '15px', marginTop: '20px' }}>
+              A major vocational education center in central Thailand. Pitchayut Somboon is currently stationed here conducting lectures and programming labs in Information Technology.
+            </p>
+
+            <div className="index-list" style={{ marginTop: '32px' }}>
+              <div className="index-list__item" style={{ borderTopColor: 'var(--color-border)' }}>
+                <span className="index-list__num">01</span>
+                <div className="index-list__content">
+                  <h4 className="index-list__title" style={{ fontSize: '15px' }}>Location coordinates</h4>
+                  <p className="index-list__desc">14.801364° N, 100.619940° E</p>
+                </div>
+              </div>
+              <div className="index-list__item" style={{ borderTopColor: 'var(--color-border)' }}>
+                <span className="index-list__num">02</span>
+                <div className="index-list__content">
+                  <h4 className="index-list__title" style={{ fontSize: '15px' }}>Target department</h4>
+                  <p className="index-list__desc">Information Technology & Software Engineering</p>
+                </div>
+              </div>
+              <div className="index-list__item" style={{ borderTopColor: 'var(--color-border)', borderBottom: '1px solid var(--color-border)' }}>
+                <span className="index-list__num">03</span>
+                <div className="index-list__content">
+                  <h4 className="index-list__title" style={{ fontSize: '15px' }}>Assigned Courses</h4>
+                  <p className="index-list__desc">Introduction to Algorithms, Conditional Loops, Python Programming</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="hero__footer-meta" style={{ gridTemplateColumns: '1fr' }}>
+            <div className="meta-box">
+              <p className="meta-box__label">COMMISSION CONTEXT</p>
+              <p className="meta-box__value">Office of the Vocational Education Commission (OVEC), Thailand</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Map & Tactical HUD */}
+        <div 
+          className="map-container-wrapper"
+          onMouseMove={handleMapMouseMove}
+          onMouseLeave={handleMapMouseLeave}
+        >
+          <div ref={mapRef} className="map-element" />
+
+          {/* HUD Elements */}
+          <div className="hud-overlay">
+            <div className="hud-radar-sweep"></div>
+            
+            {/* HUD Corner brackets */}
+            <div className="hud-corner-brackets-tl"></div>
+            <div className="hud-corner-brackets-tr"></div>
+            <div className="hud-corner-brackets-bl"></div>
+            <div className="hud-corner-brackets-br"></div>
+
+            {/* Target status indicators */}
+            <div className="hud-status-panel">
+              <div className="hud-status-dot"></div>
+              <span className="font-mono">SYS STATUS: TARGET LOCKED</span>
+            </div>
+
+            {/* Interactive HUD Crosshairs */}
+            {mapPixelCoords && (
+              <>
+                <div 
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: `${mapPixelCoords.y}px`,
+                    width: '100%',
+                    height: '1px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                    zIndex: 25,
+                    pointerEvents: 'none'
+                  }}
+                />
+                <div 
+                  style={{
+                    position: 'absolute',
+                    left: `${mapPixelCoords.x}px`,
+                    top: 0,
+                    width: '1px',
+                    height: '100%',
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                    zIndex: 25,
+                    pointerEvents: 'none'
+                  }}
+                />
+              </>
+            )}
+
+            {/* Coordinate & Grid info panel */}
+            <div className="hud-info-panel">
+              <div className="hud-panel-line">
+                <span className="hud-panel-label">LAT:</span>
+                <span>{mapCoords ? mapCoords.lat.toFixed(6) : '14.801364'}° N</span>
+              </div>
+              <div className="hud-panel-line">
+                <span className="hud-panel-label">LNG:</span>
+                <span>{mapCoords ? mapCoords.lng.toFixed(6) : '100.619940'}° E</span>
+              </div>
+              <div className="hud-panel-line">
+                <span className="hud-panel-label">GRID:</span>
+                <span className="font-mono">47P YS 619 801</span>
+              </div>
+              <div className="hud-panel-line">
+                <span className="hud-panel-label">ZOOM:</span>
+                <span>{mapZoom}X MAG</span>
+              </div>
+              <div className="hud-panel-line" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '4px', marginTop: '4px' }}>
+                <span className="hud-panel-label">TARGET:</span>
+                <span style={{ fontWeight: 'bold' }}>LOPBURI_TECH_COLL</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Sliding detail drawers for overlay sections */}
 
       {/* PROFILE DRAWER */}
       <div className={`detail-drawer ${activeSection === 'about' ? 'active' : ''}`}>
@@ -239,30 +454,23 @@ function App() {
           <div className="about-section">
             <h3 style={{ fontSize: '18px', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px' }}>TEACHING DUTIES</h3>
             <p className="bio-paragraph">
-              During my practicum at Triam Udom Suksa School, I took responsibility for lecturing Grade 10 students in basic computational logic, algorithmic thinking, and introductory Python programming.
+              During my practicum at Lopburi Technical College, I took responsibility for lecturing Vocational students in basic computer logic, algorithms, and Python programming.
             </p>
             
             <h3 style={{ marginTop: '24px', fontSize: '18px', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px' }}>CLASS ASSIGNMENTS</h3>
             <div className="timeline">
               <div className="timeline-item">
-                <span className="timeline-year">Class 811</span>
+                <span className="timeline-year">IT Class 01</span>
                 <div>
-                  <h4 className="timeline-title">Computer Science 1 (ว30181)</h4>
-                  <p className="timeline-desc">Grade 10 · 2 Hours per week · Focusing on logical structure and flowcharts.</p>
+                  <h4 className="timeline-title">Introduction to Programming (IT 101)</h4>
+                  <p className="timeline-desc">2 Hours per week · Focusing on logical structure and programming fundamentals.</p>
                 </div>
               </div>
               <div className="timeline-item">
-                <span className="timeline-year">Class 812</span>
+                <span className="timeline-year">IT Class 02</span>
                 <div>
-                  <h4 className="timeline-title">Computer Science 1 (ว30181)</h4>
-                  <p className="timeline-desc">Grade 10 · 2 Hours per week · Focus on Decomposition and Pattern recognition.</p>
-                </div>
-              </div>
-              <div className="timeline-item">
-                <span className="timeline-year">Class 813</span>
-                <div>
-                  <h4 className="timeline-title">Introductory Programming (ว30182)</h4>
-                  <p className="timeline-desc">Grade 10 · 2 Hours per week · Core programming principles in Python.</p>
+                  <h4 className="timeline-title">Introductory Python Loops</h4>
+                  <p className="timeline-desc">2 Hours per week · Hands-on conditional loops and list structures.</p>
                 </div>
               </div>
             </div>
@@ -273,7 +481,7 @@ function App() {
       {/* LESSON PLANS DRAWER */}
       <div className={`detail-drawer ${activeSection === 'lessons' ? 'active' : ''}`}>
         <div className="drawer-header">
-          <h2 className="drawer-title">03 / LESSON PLANS</h2>
+          <h2 className="drawer-title">04 / LESSON PLANS</h2>
           <button className="close-btn" onClick={() => setActiveSection('home')}>CLOSE ✕</button>
         </div>
         <div className="drawer-body">
@@ -311,26 +519,26 @@ function App() {
       {/* GALLERY DRAWER */}
       <div className={`detail-drawer ${activeSection === 'gallery' ? 'active' : ''}`}>
         <div className="drawer-header">
-          <h2 className="drawer-title">04 / GALLERY</h2>
+          <h2 className="drawer-title">05 / GALLERY</h2>
           <button className="close-btn" onClick={() => setActiveSection('home')}>CLOSE ✕</button>
         </div>
         <div className="drawer-body">
           <div className="photo-gallery">
             <div className="gallery-photo">
-              <div className="gallery-photo__label">01 / PROGRAMMING LAB</div>
-              <div className="gallery-photo__bg">CLASSROOM SESSION</div>
+              <div className="gallery-photo__label">01 / LOPBURI TECH</div>
+              <div className="gallery-photo__bg">CAMPUS LAB</div>
             </div>
             <div className="gallery-photo">
-              <div className="gallery-photo__label">02 / STUDENT WORK</div>
-              <div className="gallery-photo__bg">LOGICAL FLOWCHARTS</div>
+              <div className="gallery-photo__label">02 / PROGRAMMING CLASSES</div>
+              <div className="gallery-photo__bg">PYTHON FUNDAMENTALS</div>
             </div>
             <div className="gallery-photo">
-              <div className="gallery-photo__label">03 / ACTIVE STUDY</div>
-              <div className="gallery-photo__bg">PYTHON INTRO</div>
+              <div className="gallery-photo__label">03 / ACTIVE LAB</div>
+              <div className="gallery-photo__bg">LOGICAL MAPPING</div>
             </div>
             <div className="gallery-photo">
-              <div className="gallery-photo__label">04 / DISCUSSION</div>
-              <div className="gallery-photo__bg">PAIR PROGRAMMING</div>
+              <div className="gallery-photo__label">04 / DISCUSSIONS</div>
+              <div className="gallery-photo__bg">STUDENT SEMINARS</div>
             </div>
           </div>
         </div>
@@ -339,7 +547,7 @@ function App() {
       {/* CONTACT DRAWER */}
       <div className={`detail-drawer ${activeSection === 'contact' ? 'active' : ''}`}>
         <div className="drawer-header">
-          <h2 className="drawer-title">05 / CONTACT</h2>
+          <h2 className="drawer-title">06 / CONTACT</h2>
           <button className="close-btn" onClick={() => setActiveSection('home')}>CLOSE ✕</button>
         </div>
         <div className="drawer-body">
